@@ -1,0 +1,5 @@
+{
+    "name": "d3d11-bc7-sample",
+    "version": "1.0.0",
+    "dependencies": ["directxtex"]
+}
