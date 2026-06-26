@@ -15,3 +15,14 @@ target_link_libraries(d3d11_bc7_sample PRIVATE
 )
 
 set_property(TARGET d3d11_bc7_sample PROPERTY VS_WINCOMPILED_MANIFEST False)
+
+add_executable(d3d11_copy_rgba32_to_bc3_sample copy_rgba32_to_bc3.cpp resources.rc)
+target_compile_definitions(d3d11_copy_rgba32_to_bc3_sample PRIVATE UNICODE _UNICODE)
+target_link_libraries(d3d11_copy_rgba32_to_bc3_sample PRIVATE
+    Microsoft::DirectXTex
+    d3d11
+    dxgi
+    d3dcompiler
+)
+
+set_property(TARGET d3d11_copy_rgba32_to_bc3_sample PROPERTY VS_WINCOMPILED_MANIFEST False)
