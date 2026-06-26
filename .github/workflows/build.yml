@@ -20,5 +20,7 @@ jobs:
               uses: actions/upload-artifact@v4
               with:
                   name: d3d11-bc7-sample-win64
-                  path: build/Release/d3d11_bc7_sample.exe
+                  path: |
+                      build/Release/d3d11_bc7_sample.exe
+                      build/Release/DirectXTex.dll
                   if-no-files-found: error
