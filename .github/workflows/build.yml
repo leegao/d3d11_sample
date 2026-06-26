@@ -16,3 +16,9 @@ jobs:
                     -DVCPKG_MANIFEST_MODE=ON
             - name: Build the project
               run: cmake --build build --config Release
+            - name: Upload Artifacts
+              uses: actions/upload-artifact@v4
+              with:
+                  name: d3d11-bc7-sample-win64
+                  path: build/Release/d3d11_bc7_sample.exe
+                  if-no-files-found: error
