@@ -100,15 +100,29 @@ int main() {
 
     D3D11_VIEWPORT viewport = { 0.0f, 0.0f, static_cast<float>(WindowWidth), static_cast<float>(WindowHeight), 0.0f, 1.0f };
     DirectX::ScratchImage image;
-    hr = DirectX::LoadFromDDSFile(
-        L"sample_bc7.dds", DirectX::DDS_FLAGS_NONE, nullptr, image
-    );
 
     ID3D11ShaderResourceView* textureSRV = nullptr;
+    HRSRC hResource = FindResource(nullptr, MAKEINTRESOURCE(101), RT_RCDATA);
+    if (!hResource) {
+        std::cerr << "Failed to get BC7 texture." << std::endl;
+        return 1;
+    }
+
+    HGLOBAL hResourceData = LoadResource(nullptr, hResource);
+    DWORD resourceSize = SizeofResource(nullptr, hResource);
+    void* pResourceBuffer = LockResource(hResourceData);
+
+    hr = DirectX::LoadFromDDSMemory(
+        static_cast<const uint8_t*>(pResourceBuffer),
+        static_cast<size_t>(resourceSize),
+        DirectX::DDS_FLAGS_NONE,
+        nullptr,
+        image
+    );
     if (SUCCEEDED(hr)) {
         hr = DirectX::CreateShaderResourceView(device, image.GetImages(), image.GetImageCount(), image.GetMetadata(), &textureSRV);
     } else {
-        std::cerr << "Failed to load BC7 texture, make sure sample_bc7.dds exists." << std::endl;
+        std::cerr << "Failed to load BC7 texture." << std::endl;
         return 1;
     }
 

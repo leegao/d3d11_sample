@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(directxtex CONFIG REQUIRED)
 
-add_executable(d3d11_bc7_sample main.cpp)
+add_executable(d3d11_bc7_sample main.cpp resources.rc)
 target_compile_definitions(d3d11_bc7_sample PRIVATE UNICODE _UNICODE)
 target_link_libraries(d3d11_bc7_sample PRIVATE
     Microsoft::DirectXTex
