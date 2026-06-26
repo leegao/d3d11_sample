@@ -9,7 +9,7 @@
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3dcompiler.lib")
 
-const UINT WindowWidth = 800;
+const UINT WindowWidth = 1080;
 const UINT WindowHeight = 600;
 
 const char* shaderSource = R"(
