@@ -40,4 +40,5 @@ jobs:
                   path: |
                       build/Release/d3d11_bc7_sample.exe
                       build/Release/d3d11_copy_rgba32_to_bc3_sample.exe
+                      build/Release/d3d11_copy_rgba32_to_bc3_with_cs_sample.exe
                   if-no-files-found: error
