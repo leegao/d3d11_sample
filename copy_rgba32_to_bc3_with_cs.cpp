@@ -3,7 +3,6 @@
 #include <d3dcompiler.h>
 #include <DirectXTex.h>
 #include <iostream>
-#include <vector>
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
@@ -28,12 +27,62 @@ VS_OUTPUT VS(uint id : SV_VertexID) {
 Texture2D tex : register(t0);
 SamplerState sam : register(s0);
 
+cbuffer CBuffer : register(b0) {
+    uint g_Value;
+    float3 padding;
+};
+
+static const uint font[10][5] = {
+    {7, 5, 5, 5, 7}, // 0
+    {2, 2, 2, 2, 2}, // 1
+    {7, 1, 7, 4, 7}, // 2
+    {7, 1, 7, 1, 7}, // 3
+    {5, 5, 7, 1, 1}, // 4
+    {7, 4, 7, 1, 7}, // 5
+    {7, 4, 7, 5, 7}, // 6
+    {7, 1, 1, 1, 1}, // 7
+    {7, 5, 7, 5, 7}, // 8
+    {7, 5, 7, 1, 7}  // 9
+};
+
+float SampleDigit(uint digit, float2 uv) {
+    if (uv.x < 0.0f || uv.x > 1.0f || uv.y < 0.0f || uv.y > 1.0f) return 0.0f;
+    uint col = (uint)(uv.x * 3.0f);
+    uint row = (uint)(uv.y * 5.0f);
+    if (col > 2 || row > 4) return 0.0f;
+
+    uint rowValue = font[digit][row];
+    uint bit = 2 - col; // Check bits left-to-right
+    return (float)((rowValue >> bit) & 1);
+}
+
 float4 PS(VS_OUTPUT input) : SV_Target {
-    return tex.Sample(sam, input.Tex);
+    float4 baseColor = tex.Sample(sam, input.Tex);
+
+    float2 textUV = (input.Tex - float2(0.05f, 0.05f)) / float2(0.15f, 0.10f);
+
+    if (textUV.x >= 0.0f && textUV.x <= 1.0f && textUV.y >= 0.0f && textUV.y <= 1.0f) {
+        uint tens = (g_Value / 10) % 10;
+        uint ones = g_Value % 10;
+
+        float isText = 0.0f;
+        if (textUV.x < 0.45f) {
+            float2 digitUV = float2(textUV.x / 0.45f, textUV.y);
+            isText = SampleDigit(tens, digitUV);
+        } else if (textUV.x > 0.55f) {
+            float2 digitUV = float2((textUV.x - 0.55f) / 0.45f, textUV.y);
+            isText = SampleDigit(ones, digitUV);
+        }
+
+        if (isText > 0.5f) {
+            return float4(1.0f, 1.0f, 0.0f, 1.0f); // Render text overlay in bright yellow
+        }
+    }
+
+    return baseColor;
 }
 )";
 
-// Compute Shader Source
 const char* csSource = R"(
 RWStructuredBuffer<uint> BufferOut : register(u0);
 
@@ -188,9 +237,28 @@ int main() {
     hr = device->CreateUnorderedAccessView(ssboBuffer, &uavDesc, &ssboUAV);
     if (FAILED(hr)) return 1;
 
+    ID3D11Buffer* stagingBuffer = nullptr;
+    D3D11_BUFFER_DESC stagingDesc = {};
+    stagingDesc.ByteWidth = sizeof(UINT32);
+    stagingDesc.Usage = D3D11_USAGE_STAGING;
+    stagingDesc.BindFlags = 0;
+    stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    hr = device->CreateBuffer(&stagingDesc, nullptr, &stagingBuffer);
+    if (FAILED(hr)) return 1;
+
+    ID3D11Buffer* constantBuffer = nullptr;
+    D3D11_BUFFER_DESC cbDesc = {};
+    cbDesc.ByteWidth = 16;
+    cbDesc.Usage = D3D11_USAGE_DYNAMIC;
+    cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    hr = device->CreateBuffer(&cbDesc, nullptr, &constantBuffer);
+    if (FAILED(hr)) return 1;
+
     // Dispatch #1
     context->CSSetShader(computeShader, nullptr, 0);
     context->CSSetUnorderedAccessViews(0, 1, &ssboUAV, nullptr);
+    std::cout << "Dispatching incremental cs #1 ..." << std::endl;
     context->Dispatch(8, 8, 1);
 
     ID3D11UnorderedAccessView* nullUAV = nullptr;
@@ -205,7 +273,7 @@ int main() {
     srcBox.bottom = 16;
     srcBox.back = 1;
 
-    std::cout << "CopySubresourceRegion..." << std::endl;
+    std::cout << "CopySubresourceRegion ..." << std::endl;
     context->CopySubresourceRegion(
         destTexture, 0,
         0, 0, 0,
@@ -216,10 +284,34 @@ int main() {
     // Dispatch #2
     context->CSSetShader(computeShader, nullptr, 0);
     context->CSSetUnorderedAccessViews(0, 1, &ssboUAV, nullptr);
+    std::cout << "Dispatching incremental cs #2 ..." << std::endl;
     context->Dispatch(8, 8, 1);
 
     context->CSSetShader(nullptr, nullptr, 0);
     context->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
+
+    D3D11_BOX srcBoxBuffer = {};
+    srcBoxBuffer.left = 0; srcBoxBuffer.right = sizeof(UINT32);
+    srcBoxBuffer.top = 0; srcBoxBuffer.bottom = 1;
+    srcBoxBuffer.front = 0; srcBoxBuffer.back = 1;
+    context->CopySubresourceRegion(stagingBuffer, 0, 0, 0, 0, ssboBuffer, 0, &srcBoxBuffer);
+
+    D3D11_MAPPED_SUBRESOURCE mappedResource;
+    hr = context->Map(stagingBuffer, 0, D3D11_MAP_READ, 0, &mappedResource);
+    UINT32 finalValue = 0;
+    if (SUCCEEDED(hr)) {
+        finalValue = *reinterpret_cast<UINT32*>(mappedResource.pData);
+        context->Unmap(stagingBuffer, 0);
+    }
+
+    std::cout << "ssboBuffer[0]: " << finalValue << std::endl;
+
+    D3D11_MAPPED_SUBRESOURCE cbMapped;
+    hr = context->Map(constantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &cbMapped);
+    if (SUCCEEDED(hr)) {
+        *reinterpret_cast<UINT32*>(cbMapped.pData) = finalValue;
+        context->Unmap(constantBuffer, 0);
+    }
 
     device->CreateShaderResourceView(destTexture, nullptr, &textureSRV);
 
@@ -257,6 +349,7 @@ int main() {
             context->PSSetShader(ps, nullptr, 0);
             context->PSSetShaderResources(0, 1, &textureSRV);
             context->PSSetSamplers(0, 1, &samplerState);
+            context->PSSetConstantBuffers(0, 1, &constantBuffer);
             context->OMSetRenderTargets(1, &rtv, nullptr);
             context->RSSetViewports(1, &viewport);
 
@@ -265,6 +358,8 @@ int main() {
         }
     }
 
+    constantBuffer->Release();
+    stagingBuffer->Release();
     ssboUAV->Release();
     ssboBuffer->Release();
     computeShader->Release();
